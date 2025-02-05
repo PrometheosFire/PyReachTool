@@ -1,7 +1,12 @@
 import cvxpy as cp
 import numpy as np
 from itertools import combinations
-from zonotope import Zonotope
+#from zonotope import Zonotope
+
+class BasicSet:
+    def __init__(self, H, p):
+        self.H = H
+        self.p = p
 
 ### set operations ###
 
@@ -18,7 +23,7 @@ def boxZonotope(Z):
 
     Zbox_p = Z.p
     Zbox_H = np.diag(np.sum(np.abs(Z.H), axis=1))
-    return Zonotope(Zbox_H, Zbox_p)
+    return Zbox_H, Zbox_p
 
 def ZonotopeLinMap(A, Z, t):
     """
@@ -54,7 +59,7 @@ def ZonotopeMinkowskiSum(X, Y):
     
     H = np.hstack((X.H, Y.H))
     p = X.p + Y.p
-    return Zonotope(H, p)
+    return H, p
 
 ### set operations ###
 
@@ -128,9 +133,9 @@ def ZonotopeOverbound(nDim, type, radius):
         H = np.diag(radius)
         p = np.zeros((nDim, 1))
     else:
-        raise ValueError('Unknown type of zonotope')
+        raise ValueError('Unknown type of set')
     
-    return Zonotope(H, p)
+    return H, p
 
 def ZonotopePropagate(system, prevX, u, d):
     """
@@ -157,8 +162,8 @@ def ZonotopePropagate(system, prevX, u, d):
     
     H1, c1 = ZonotopeLinMap(A, prevX, B @ u) #  A*x + B*u
     H2, c2 = ZonotopeLinMap(L, d, np.zeros((L.shape[0], 1)))
-    
-    return ZonotopeMinkowskiSum(Zonotope(H1, c1,), Zonotope(H2, c2)) # A*x + B*u + L*Disturbance
+
+    return ZonotopeMinkowskiSum(BasicSet(H1, c1,), BasicSet(H2, c2)) # A*x + B*u + L*Disturbance
 
 def ZonotopeUpdate(system, X, u, y, noise):
     """
@@ -184,7 +189,7 @@ def ZonotopeUpdate(system, X, u, y, noise):
     D = system['D']
     
     H1, c1 = ZonotopeLinMap(-N, noise, y - D @ u)
-    Y = boxZonotope(Zonotope(H1, c1))
+    Yh, Yc = boxZonotope(BasicSet(H1, c1))
 
     n = X.H.shape[0]
 
@@ -193,8 +198,8 @@ def ZonotopeUpdate(system, X, u, y, noise):
 
     for jout in range(C.shape[0]):  # take each measurement as independent and intersect
         c =C[jout, :].reshape(-1, 1)
-        d = Y.p[jout, 0]
-        sigma = Y.H[jout, jout]
+        d = Yc[jout]
+        sigma = Yh[jout, jout]
 
         # compute the intersection with the strip for the jout measurement
         # Test added to avoid numerical problems
@@ -203,14 +208,16 @@ def ZonotopeUpdate(system, X, u, y, noise):
                 continue
             else:
                 nextH = np.full_like(H, np.nan)
-                nextc = np.full_like(p, np.nan)
-                return nextH, nextc
+                nextp = np.full_like(p, np.nan)
+                return nextH, nextp
 
         lstar = (H @ H.T @ c) / (c.T @ H @ H.T @ c + sigma**2)
-        nextH = np.hstack(((np.eye(n) - lstar @ c.T) @ nextH, sigma * lstar))
-        nextc = nextc + lstar * (d - c.T @ nextc)
+        H = np.hstack(((np.eye(n) - lstar @ c.T) @ H, sigma * lstar))
+        p = p + lstar * (d - c.T @ p)
     
-    return Zonotope(nextH, nextc)
+    nextH = H
+    nextp = p
+    return nextH, nextp
 
 def ZonotopeVolume(Z):
     """
