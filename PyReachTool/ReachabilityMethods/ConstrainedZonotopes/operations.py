@@ -1,7 +1,7 @@
 import cvxpy as cp
 import numpy as np
 from scipy.linalg import block_diag
-from itertools import combinations
+from VolumeRayShootting import VolumeRayShooting
 
 class BasicSet:
     def __init__(self, G, c, A, b):
@@ -271,3 +271,37 @@ def CZUpdate(system, X, u, y, noise):
     G, c, A, b = CZLinMap(-N, noise, y - D @ u)
 
     return CZIntersect(C, X, BasicSet(G, c, A, b))
+
+
+def CZVolume(X):
+    """
+    CZVolume - Function that calculates the volume of the Constrained Zonotope.
+    
+    Parameters:
+        X (Constrained Zonotope): Constrained Zonotope object.
+    
+    Returns:
+        volume (float): Volume of the Constrained Zonotope.
+    """
+    
+    n = X.G.shape[0]
+    F, p = compileCZ(X)
+
+    if n == 1:
+
+        v = cp.Variable()
+
+        problem = cp.Problem(cp.Minimize(v * p), F)
+        extreme_neg = problem.solve()                   # Solve using mosek?
+
+        problem = cp.Problem(cp.Maximize(v * p), F)
+        extreme_pos = problem.solve()
+
+        volume = extreme_pos - extreme_neg
+
+    # elif n == 2:
+    else:
+        #Let us resort to an implementation of a ray shooting technique
+        volume = VolumeRayShooting(F, p, n, CZCenter(X))
+
+    return volume

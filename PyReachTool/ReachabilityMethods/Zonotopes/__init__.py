@@ -1,7 +1,7 @@
 import numpy as np
 from scipy.spatial import ConvexHull
 import matplotlib.pyplot as plt
-from operations import *
+from PyReachTool.ReachabilityMethods.Zonotopes.operations import *
 
 class Zonotope:
     def __init__(self, H, p):
